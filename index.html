@@ -339,6 +339,13 @@
     <form id="formulario" novalidate>
 
       <div class="campo">
+        <label for="gerencia">Gerência</label>
+        <select id="gerencia" required>
+          <option value="" disabled selected>Selecione a gerência</option>
+        </select>
+      </div>
+
+      <div class="campo">
         <label for="codigoCliente">Código do cliente (PV)</label>
         <input
           type="text"
@@ -351,13 +358,6 @@
         <div class="dica">Somente números, exatamente 7 dígitos.</div>
         <div class="erro-campo" id="erroCodigo">O código deve ter exatamente 7 números.</div>
         <div class="nome-fantasia" id="nomeFantasiaInfo"></div>
-      </div>
-
-      <div class="campo">
-        <label for="gerencia">Gerência</label>
-        <select id="gerencia" required>
-          <option value="" disabled selected>Selecione a gerência</option>
-        </select>
       </div>
 
       <div class="campo">
@@ -403,7 +403,9 @@
   const campoGerencia = document.getElementById('gerencia');
 
   let nomeFantasiaAtual = ''; // referente ao PV atualmente digitado no campo
-  const cacheNomesFantasia = {}; // cache em memória: código -> nome (evita repetir buscas na mesma sessão)
+  let gerenciaBaseAtual = ''; // gerência do PV segundo a base (vazio se PV novo/não encontrado)
+  let ultimaBuscaInfo = null; // último resultado bruto da busca: null (não encontrado) ou {nome, gerencia}
+  const cacheNomesFantasia = {}; // cache em memória: código -> {nome, gerencia} | null
   const tabelasContainer = document.getElementById('tabelasContainer');
   const erroTabela = document.getElementById('erroTabela');
   const statusFormulario = document.getElementById('statusFormulario');
@@ -518,6 +520,8 @@
 
     const codigo = campoCodigo.value;
     nomeFantasiaAtual = '';
+    gerenciaBaseAtual = '';
+    ultimaBuscaInfo = null;
 
     if(codigo.length !== 7){
       nomeFantasiaInfo.textContent = '';
@@ -546,9 +550,9 @@
       if(minhaBusca !== buscaEmAndamento) return; // usuário já mudou o campo, ignora resposta antiga
       if(campoCodigo.value !== codigo) return;
 
-      const nome = dados.encontrado ? dados.nomeFantasia : null;
-      cacheNomesFantasia[codigo] = nome;
-      exibirNomeFantasia(codigo, nome);
+      const info = dados.encontrado ? { nome: dados.nomeFantasia, gerencia: dados.gerencia || '' } : null;
+      cacheNomesFantasia[codigo] = info;
+      exibirNomeFantasia(codigo, info);
 
     }catch(e){
       if(minhaBusca !== buscaEmAndamento) return;
@@ -557,18 +561,39 @@
     }
   }
 
-  function exibirNomeFantasia(codigo, nome){
+  function exibirNomeFantasia(codigo, info){
     if(campoCodigo.value !== codigo) return;
-    if(nome){
-      nomeFantasiaAtual = nome;
-      nomeFantasiaInfo.textContent = '✓ ' + nome;
-      nomeFantasiaInfo.className = 'nome-fantasia encontrado';
-    }else{
+    ultimaBuscaInfo = info;
+
+    if(!info){
+      // PV não está na base: pode ser cliente novo, permite adicionar normalmente
       nomeFantasiaAtual = '';
-      nomeFantasiaInfo.textContent = 'PV não encontrado na base — confira o número.';
+      gerenciaBaseAtual = '';
+      nomeFantasiaInfo.textContent = 'PV não encontrado na base — pode ser um cliente novo.';
       nomeFantasiaInfo.className = 'nome-fantasia nao-encontrado';
+      return;
+    }
+
+    nomeFantasiaAtual = info.nome;
+    gerenciaBaseAtual = info.gerencia;
+
+    const gerenciaSelecionada = campoGerencia.value;
+
+    if(gerenciaBaseAtual && gerenciaSelecionada && gerenciaBaseAtual !== gerenciaSelecionada){
+      nomeFantasiaInfo.textContent = '⚠ ' + info.nome + ' pertence à gerência ' + gerenciaBaseAtual + ', não ' + gerenciaSelecionada + '.';
+      nomeFantasiaInfo.className = 'nome-fantasia nao-encontrado';
+    }else{
+      nomeFantasiaInfo.textContent = '✓ ' + info.nome;
+      nomeFantasiaInfo.className = 'nome-fantasia encontrado';
     }
   }
+
+  // Se o usuário trocar a gerência depois de já ter buscado o PV, revalida na hora
+  campoGerencia.addEventListener('change', () => {
+    if(campoCodigo.value.length === 7){
+      exibirNomeFantasia(campoCodigo.value, ultimaBuscaInfo);
+    }
+  });
 
   // ---------- Renderizar lista de PVs adicionados ----------
   function renderizarLista(){
@@ -635,6 +660,11 @@
       valido = false;
     }
 
+    if(gerenciaBaseAtual && gerencia && gerenciaBaseAtual !== gerencia){
+      mostrarStatus(statusFormulario, 'Este PV pertence à gerência ' + gerenciaBaseAtual + '. Ajuste a gerência selecionada ou confira o PV digitado.', 'erro');
+      valido = false;
+    }
+
     if(!valido) return;
 
     // Um item por tabela marcada, mesmo PV e Gerência
@@ -646,6 +676,8 @@
     // Limpa PV, nome fantasia e as tabelas marcadas, mas MANTÉM a gerência selecionada
     campoCodigo.value = '';
     nomeFantasiaAtual = '';
+    gerenciaBaseAtual = '';
+    ultimaBuscaInfo = null;
     nomeFantasiaInfo.textContent = '';
     nomeFantasiaInfo.className = 'nome-fantasia';
     tabelasSelecionadas.clear();
