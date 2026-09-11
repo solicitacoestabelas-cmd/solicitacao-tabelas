@@ -676,7 +676,7 @@
       const resultado = await resposta.json();
 
       if(resultado.sucesso){
-        mostrarStatus(statusEnvio, 'Enviado com sucesso! IDs: ' + resultado.ids.join(', '), 'sucesso');
+        mostrarStatus(statusEnvio, 'Enviado com sucesso!', 'sucesso');
         itens = [];
         renderizarLista();
         dataHoraInicio = new Date().toISOString();
